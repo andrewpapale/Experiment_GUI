@@ -1,4 +1,4 @@
-function [IM,x,y,IMbw2,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,samplesQueued,mouseArea0,switchNT,fillV] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,samplesQueued,pulseMatrix,xset,yset,time,nx0,ny0,tx0,ty0,invertColors)
+function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,pulseMatrix,xset,yset,time,nx0,ny0,tx0,ty0,invertColors)
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 % 2018-08-14 AndyP, changed <ntX0,ntY0> -> <tX0,tY0>, corrected eroded
@@ -16,6 +16,7 @@ amp = nan;
 dur = nan;
 switchNT = nan;
 fillV = nan;
+DAQoutput = 0;
 % try
 IM = GetFrame(V);
 timeOfFrameAcq = toc(tstart);
@@ -147,6 +148,8 @@ if nC>0
             ny = nY0(noseI);
             lastnx = nx;
             lastny = ny;
+        else
+            mouseLength = nan;
         end
         
         % algorithm to correct nose tail flipping
@@ -162,7 +165,7 @@ if nC>0
                 V0 = dx0.^2+dy0.^2;
                 lastx1 = nan;
                 lasty1 = nan;
-                if abs(V0) > Inf
+                if abs(V0) < Inf
                     m0 = dy0./dx0;
                     lastminX = nan;
                     lastmaxX = nan;
@@ -284,7 +287,7 @@ if optoControl > 0
         samplesQueued = samplesQueued+1;
         %disp(samplesQueued);
         if ~DAQ.s3.IsRunning
-            prepare(DAQ.s3);
+            %prepare(DAQ.s3);
         end
     end
     if ~DAQ.s3.IsRunning
@@ -293,9 +296,32 @@ if optoControl > 0
     end
     
 end
-% catch
-%     timeOfFrameAcq = nan;
-%     IMbw2 = zeros(V.Height,V.Width);
-%     IM = zeros(V.Height,V.Width);
-%     warning('frame was not updated');
+
+% if optoNoise
+%     if ISI > 0 && ~isnan(x)
+%         
+%         sigOut = zeros(length(t),1);
+%         ix = 1:length(sigOut);
+%         sigOut(ix(mod(ix,5)==0))= optoNoiseAmpOut;
+%         sigOut(end) = 0;
+%         
+%         if DAQ.s3.ScansQueued==0
+%             queueOutputData(DAQ.s3, sigOut);
+%             samplesQueued = samplesQueued+1;
+%             %disp(samplesQueued);
+%             if ~DAQ.s3.IsRunning
+%                 prepare(DAQ.s3);
+%             end
+%         end
+%         
+%         if ~DAQ.s3.IsRunning && DAQgo
+%                 startBackground(DAQ.s3);
+%                 DAQoutput = 1;
+%                 %disp('outputting new sample');
+%         end
+%     else
+%         
+%     end
 % end
+
+end

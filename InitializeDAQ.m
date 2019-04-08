@@ -13,4 +13,8 @@ DAQ.s3.IsContinuous = true;
 DAQ.s3.NotifyWhenScansQueuedBelow = 5;
 DAQ.s3.Rate = 500;
 %outputSingleScan(DAQ.s3,0); 
+
+DAQ.s4 = daq.createSession('ni');
+addAnalogInputChannel(DAQ.s4,'Dev1','ai0','Voltage');
+
 end

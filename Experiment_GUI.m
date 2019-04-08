@@ -22,7 +22,7 @@ function varargout = Experiment_GUI(varargin)
 
 % Edit the above text to modify the response to help Experiment_GUI
 
-% Last Modified by GUIDE v2.5 12-Oct-2018 13:37:50
+% Last Modified by GUIDE v2.5 15-Feb-2019 13:19:33
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -88,6 +88,10 @@ handles.cy = [];
 handles.gauss_width = [];
 handles.fanx = [];
 handles.fany = [];
+
+handles.optoNoiseAmpOut = 0;
+handles.optoNoise = false;
+handles.ISI = 0;
 % amp_map = imread('prob_map.tif');
 % amp_map = im2double(amp_map);
 % handles.amp_map = amp_map./max(amp_map(:)).*5; % scale pixel intensity to voltage max
@@ -151,8 +155,15 @@ function Start_Callback(hObject, eventdata, handles)
 % hObject    handle to Start (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+hAxes = handles.axes1;
+persistent hImage
+cla(hAxes,'reset')
+
 avgFrameRate = [];
-nUpdate = 10;
+nUpdate = 15;
+ISItime = 0;
+FoodZoneOn = 0;
+RewardZoneOn = 0;
 fprintf('Starting camera, updating image every %0.2f frames \n', nUpdate);
 handles.V.baseFrame0 = GetFrame(handles.V);
 handles.V.baseFrame = imdilate((handles.V.baseFrame0),strel('disk',2));
@@ -180,24 +191,46 @@ fillV0 = [];
 switchNT0 = [];
 mouseLength0 = [];
 mouseArea0 = [];
+sigOut0 = [];
+timeOut0 = [];
+timeOutStop0 = [];
+
+P1 = []; P2 = []; P3 = [];
 loopRate = 50;
 %freqs = linspace(0.5,40,100);
-tmax = 1/20;
-t=0:(1/handles.DAQ.s3.Rate):tmax;
-samplesQueued=0;
+tstim_max = 1/20;
+tstim_max_noise_exp = 3;
+t_stim=0:(1/handles.DAQ.s3.Rate):tstim_max;
+t_stim_noise_exp = 0:(1/handles.DAQ.s3.Rate):tstim_max_noise_exp;
 
+%tstim = clock;
 if handles.spotTrial && handles.optoControl
     % define pulses
     Pmap = unique(handles.freq_map(:));
     nP = length(Pmap);
-    pulseMatrix = nan(nP,length(t));
+    pulseMatrix = nan(nP,length(t_stim));
     for iP=1:nP
-        pulseMatrix(iP,:) = cat(2,ones(1,Pmap(iP)),zeros(1,length(t)-Pmap(iP)));
+        pulseMatrix(iP,:) = cat(2,ones(1,Pmap(iP)),zeros(1,length(t_stim)-Pmap(iP)));
     end
 else
     pulseMatrix=[];
     
 end
+
+hImage = imshow(handles.V.baseFrame0,'Parent',hAxes);
+pos = get(hAxes,'Position');
+
+set(hAxes,'Units','pixels','Position',[pos(1)+100,pos(2)+150,handles.V.Width,handles.V.Height]);
+
+set(hAxes, 'xlimmode','manual',...
+           'ylimmode','manual',...
+           'zlimmode','manual',...
+           'climmode','manual',...
+           'alimmode','manual');
+set(gcf,'doublebuffer','off');
+
+if handles.spotTrial;  radius = handles.radiusAroundSpot; px = handles.cx-radius; py = handles.cy-radius; end;
+if handles.spotTrial; R = rectangle('Position',[px py 2*radius 2*radius],'Curvature',[1,1]); set(R,'EdgeColor','r'); end;
 
 r = robotics.Rate(loopRate);
 tstart = tic;
@@ -218,13 +251,57 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
     frameNum = frameNum+1;
     %% main experiment loop
     handles.invertColors = handles.BlackMouse.Value;
-    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeofFrameAcq,amp,dur,samplesQueued,mouseArea,switchNT,fillV] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t,optoControl,tstart,samplesQueued,pulseMatrix,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
     
-    x0 = cat(1,x0,x); 
-    y0 = cat(1,y0,y);
-    if isempty(nx)
-        keyboard;
+    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,pulseMatrix,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
+    
+%     %disp(etime(clock,tstim));
+%     if etime(clock,tstim) > ISItime1 && ~RewardZoneOn & (x < 500 && y > 100)
+%         DAQgo = true;
+%         tstim = clock;
+%         if ~isempty(ISItime)
+%             ISItime(1)=[];
+%         end
+%     else
+%         DAQgo = false;
+%         if handles.DAQ.s3.ScansQueued==1 & ~handles.DAQ.s3.IsRunning
+%             prepare(handles.DAQ.s3);
+%         end
+%     end
+% ,handles.optoNoiseAmpOut,handles.optoNoise,ISItime1,DAQgo
+%         sigOut = zeros(length(t),1);
+%         ix = 1:length(sigOut);
+%         sigOut(ix(mod(ix,5)==0))= optoNoiseAmpOut;
+%         sigOut(end) = 0;
+if handles.optoNoise
+    if (~RewardZoneOn && ~isnan(x) && ~(x > 500 && y < 100)) % output signal
+        if handles.DAQ.s3.ScansQueued <=3
+            sigOut = zeros(length(t_stim_noise_exp),1);
+            ix = 1:length(sigOut);
+            switch handles.ISI
+                case 1
+                    sigOut(ix(mod(ix,handles.DAQ.s3.Rate)==0)) = handles.optoNoiseAmpOut;
+                case 2
+                    ISItime =(3)-(3-1)*rand(2000,1);
+                    ISItime = cumsum(ISItime);
+                    sigOut(interp1(t_stim_noise_exp,ix,ISItime,'nearest','extrap'))= handles.optoNoiseAmpOut;
+            end
+            sigOut(end)=0;
+            queueOutputData(handles.DAQ.s3, sigOut);
+        end
+        if ~handles.DAQ.s3.IsRunning && handles.DAQ.s3.ScansQueued > 3
+            sigOut0 = cat(1,sigOut0,sigOut);
+            timeOut0 = cat(1,timeOut0,timeofFrameAcq);
+            startBackground(handles.DAQ.s3);
+        end
+    elseif (RewardZoneOn || isnan(x) || (x > 500 && y < 100)) % signal is outputting 
+        timeOutStop0 = cat(1,timeOutStop0,timeofFrameAcq);
+        stop(handles.DAQ.s3); % long ~0.1Hz delay
     end
+
+end
+    
+    x0 = cat(1,x0,x);
+    y0 = cat(1,y0,y);
     nx0 = cat(1,nx0,nx);
     ny0 = cat(1,ny0,ny);
     tx0 = cat(1,tx0,tx);
@@ -233,10 +310,15 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
     time0 = cat(1,time0,timeofFrameAcq);
     mouseLength0 = cat(1,mouseLength0,mouseLength);
     mouseArea0 = cat(1,mouseArea0,mouseArea);
-    amp0 = cat(1,amp0,amp);
-    dur0 = cat(1,dur0,dur);
     fillV0 = cat(1,fillV0,fillV);
     switchNT0 = cat(1,switchNT0,switchNT);
+    
+    if handles.optoControl
+        amp0 = cat(1,amp0,amp);
+        dur0 = cat(1,dur0,dur);
+    end
+    
+    
     %% record video
     if handles.RecordIt && ~handles.StopRecChk.Value && etime(t1,handles.recordtimer)>2
         handles = guidata(hObject);
@@ -247,15 +329,14 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
         end
     end
     %% controls image window, updates every nUpdate frames
-    if mod(frameNum,nUpdate)==0 % update figure every 5 frames
-        cla('reset');
-        imagesc(IM); hold on; axis xy;
-        radius = handles.radiusAroundSpot;
-        px = handles.cx-radius;
-        py = handles.cy-radius;
-        if handles.spotTrial; R = rectangle('Position',[px py 2*radius 2*radius],'Curvature',[1,1]); set(R,'EdgeColor','r'); end;
-        plot(x,y,'rx','markersize',20); plot(x,y,'ro','markersize',20); plot(nx,ny,'gx','markersize',10); line([x,nx],[y,ny],'color','r');
-        colormap('gray'); axis off;
+    if mod(frameNum,nUpdate)==0 % update figure every nUpdate frames
+        %cla('reset'); % old
+        delete(P2); delete(P3);
+        %imagesc(IM); hold on; axis xy; colormap('gray'); % old
+        set(hImage,'CData',IM); hold on; axis xy;
+        %2019-02-27 much faster
+        P2 = plot(x,y,'ro','markersize',20); P3 = plot(nx,ny,'gx','markersize',10); %line([x,nx],[y,ny],'color','r');
+        set(gca,'Position',[hAxes.Position(1),hAxes.Position(2),hAxes.Position(3),hAxes.Position(4)]);
         %drawnow;
         %         handles = guidata(hObject);
         %         guidata(hObject,handles);
@@ -301,15 +382,15 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
     else
     end
     
-%     if handles.changeBuzzer && BuzzerOff
-%         %outputSingleScan(handles.DAQ.s2,1);
-%         handles.changeBuzzer = 0;
-%         BuzzerOff = 0;
-%     elseif handles.changeBuzzer && ~BuzzerOff
-%        % outputSingleScan(handles.DAQ.s2,0);
-%         handles.changeBuzzer = 0;
-%         BuzzerOff = 1;
-%     end
+    %     if handles.changeBuzzer && BuzzerOff
+    %         %outputSingleScan(handles.DAQ.s2,1);
+    %         handles.changeBuzzer = 0;
+    %         BuzzerOff = 0;
+    %     elseif handles.changeBuzzer && ~BuzzerOff
+    %        % outputSingleScan(handles.DAQ.s2,0);
+    %         handles.changeBuzzer = 0;
+    %         BuzzerOff = 1;
+    %     end
     
     if handles.spotTrial
         tsess0 = clock;
@@ -373,54 +454,57 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
     if handles.autoReward || handles.spotTrial
         
         if sessT >= handles.maxSessT || handles.SaveData.Value
-                trialNum = 1:length(handles.TrialStartT);
-                trialStartT = handles.TrialStartT;
-                foundSpotT = handles.foundSpotT;
-                maxSessT = handles.maxSessT;
-                nPelletsPerTrial = handles.nPelletsPerTrial;
-                spotTrial = handles.spotTrial;
-                radiusAroundSpot = handles.radiusAroundSpot./handles.pixpercm;
-                cx = handles.cx;
-                cy = handles.cy;
-                pixpercm = handles.pixpercm;
-                optoControl = handles.optoControl;
-                fixedRadiusBug = 1;
-                useBody = handles.useBody;
-                ITI = handles.ITI;
-                autoReward = handles.autoReward;
-                gauss_width = handles.gauss_width;
-                fanx = handles.fanx;
-                fany = handles.fany;
-                handles.V.ExposureMode = handles.V.src.ExposureMode;
-                handles.V.Exposure = handles.V.src.Exposure;
-                handles.V.GainMode = handles.V.src.GainMode;
-                handles.V.Gain = handles.V.src.Gain;
-                handles.V.FrameRateMode = handles.V.src.FrameRateMode;
-                handles.V.FrameRate = handles.V.src.FrameRate;
-                handles.V.ShutterMode = handles.V.src.ShutterMode;
-                handles.V.Shutter = handles.V.src.Shutter;
-                handles.V.SharpnessMode = handles.V.src.SharpnessMode;
-                handles.V.Sharpness = handles.V.src.Sharpness;
-                handles.V.camera.FramesPerTrigger = 1;
-                manualCamera = 1; % 2018-09-17 AndyP
-                V = [];
-                if ~isempty(handles.V)
-                    V = handles.V;
-                end
-                temp = clock;
-                if temp(2)<10 % add a zero
-                    monstr = strcat('0',mat2str(temp(2)));
-                else
-                    monstr = mat2str(temp(2));
-                end
-                if temp(3)<10 % add a zero
-                    daystr = strcat('0',mat2str(temp(3)));
-                else
-                    daystr = mat2str(temp(3));
-                end
-                saveStr = strcat(mat2str(temp(1)),'-',monstr,'-',daystr,'_',mat2str(temp(4)),'_',mat2str(temp(5)));
-                save(strcat(saveStr,'.mat'),'manualCamera','fixedRadiusBug','dur0','amp0','loopRate','tmax','optoControl','frame0','time0','r','tx0','ty0','mouseLength0','pixpercm','radiusAroundSpot','trialNum','trialStartT','foundSpotT','maxSessT','nPelletsPerTrial','spotTrial','x0','y0','nx0','ny0','V','cx','cy','mouseArea0','switchNT0','fillV0','useBody','ITI','autoReward','gauss_width','fanx','fany');
-                
+            trialNum = 1:length(handles.TrialStartT);
+            trialStartT = handles.TrialStartT;
+            foundSpotT = handles.foundSpotT;
+            maxSessT = handles.maxSessT;
+            nPelletsPerTrial = handles.nPelletsPerTrial;
+            spotTrial = handles.spotTrial;
+            radiusAroundSpot = handles.radiusAroundSpot./handles.pixpercm;
+            cx = handles.cx;
+            cy = handles.cy;
+            pixpercm = handles.pixpercm;
+            optoControl = handles.optoControl;
+            fixedRadiusBug = 1;
+            useBody = handles.useBody;
+            ITI = handles.ITI;
+            autoReward = handles.autoReward;
+            gauss_width = handles.gauss_width;
+            fanx = handles.fanx;
+            fany = handles.fany;
+            handles.V.ExposureMode = handles.V.src.ExposureMode;
+            handles.V.Exposure = handles.V.src.Exposure;
+            handles.V.GainMode = handles.V.src.GainMode;
+            handles.V.Gain = handles.V.src.Gain;
+            handles.V.FrameRateMode = handles.V.src.FrameRateMode;
+            handles.V.FrameRate = handles.V.src.FrameRate;
+            handles.V.ShutterMode = handles.V.src.ShutterMode;
+            handles.V.Shutter = handles.V.src.Shutter;
+            handles.V.SharpnessMode = handles.V.src.SharpnessMode;
+            handles.V.Sharpness = handles.V.src.Sharpness;
+            handles.V.camera.FramesPerTrigger = 1;
+            manualCamera = 1; % 2018-09-17 AndyP
+            optoNoiseAmpOut = handles.optoNoiseAmpOut;
+            optoNoise = handles.optoNoise;
+            
+            V = [];
+            if ~isempty(handles.V)
+                V = handles.V;
+            end
+            temp = clock;
+            if temp(2)<10 % add a zero
+                monstr = strcat('0',mat2str(temp(2)));
+            else
+                monstr = mat2str(temp(2));
+            end
+            if temp(3)<10 % add a zero
+                daystr = strcat('0',mat2str(temp(3)));
+            else
+                daystr = mat2str(temp(3));
+            end
+            saveStr = strcat(mat2str(temp(1)),'-',monstr,'-',daystr,'_',mat2str(temp(4)),'_',mat2str(temp(5)));
+            save(strcat(saveStr,'.mat'),'timeOutStop0','timeOut0','sigOut0','t_stim_noise_exp','t_stim','optoNoiseAmpOut','optoNoise','manualCamera','fixedRadiusBug','dur0','amp0','loopRate','tstim_max','optoControl','frame0','time0','r','tx0','ty0','mouseLength0','pixpercm','radiusAroundSpot','trialNum','trialStartT','foundSpotT','maxSessT','nPelletsPerTrial','spotTrial','x0','y0','nx0','ny0','V','cx','cy','mouseArea0','switchNT0','fillV0','useBody','ITI','autoReward','gauss_width','fanx','fany');
+            
             handles.RecordIt = 0;
             soundsc(handles.endtone);
             pause(1);
@@ -429,11 +513,11 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
             soundsc(handles.endtone);
             handles.Food = 0;
             handles.autoReward = 0;
-%             if BuzzerOff
-%                 handles.changeBuzzer = 0;
-%             else
-%                 handles.changeBuzzer = 1;
-%             end
+            %             if BuzzerOff
+            %                 handles.changeBuzzer = 0;
+            %             else
+            %                 handles.changeBuzzer = 1;
+            %             end
             handles.autoReward = 0;
             handles.spotTrial = 0;
             handles.stopLoop = 1;
@@ -443,25 +527,21 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
                 close(handles.V.videoFP);
                 handles.V.videoFP = [];
             end
-%             set(handles.OptoOff,'Value',1);
-%             set(handles.VaryAmplitude,'Value',0);
-%             set(handles.VaryFrequency,'Value',0);
-%             set(handles.VaryFreqAndAmp,'Value',0);
+            %             set(handles.OptoOff,'Value',1);
+            %             set(handles.VaryAmplitude,'Value',0);
+            %             set(handles.VaryFrequency,'Value',0);
+            %             set(handles.VaryFreqAndAmp,'Value',0);
             set(handles.Start,'Value',0);
             stop(handles.DAQ.s3);
             pause(1);
             guidata(hObject,handles);
             
-            if handles.optoControl
-                guidata(hObject,handles);
-                ResetCamera;
-                ResetDAQ(handles.DAQ);
-                close all force;
-                break;
-            end
-            
-            
-            
+            guidata(hObject,handles);
+            ResetCamera;
+            ResetDAQ(handles.DAQ);
+            close all force;
+            break;
+
         end
         
     end
@@ -822,7 +902,7 @@ function checkbox1_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of checkbox1
 handles.stopLoop = 1;
 handles.RecordIt = 0;
-if ~isempty(handles.V.videoFP)  
+if ~isempty(handles.V.videoFP)
     close(handles.V.videoFP);
     handles.V.videoFP = [];
 end
@@ -838,7 +918,7 @@ function StopRecChk_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of StopRecChk
 handles.RecordIt = 0;
 handles.stopLoop = 1;
-if ~isempty(handles.V.videoFP)  
+if ~isempty(handles.V.videoFP)
     close(handles.V.videoFP);
     handles.V.videoFP = [];
 end
@@ -921,3 +1001,90 @@ function BlackMouse_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of BlackMouse
+
+
+% --- Executes on button press in OptoNoiseON.
+function OptoNoiseON_Callback(hObject, eventdata, handles)
+% hObject    handle to OptoNoiseON (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of OptoNoiseON
+if get(handles.OptoNoiseON,'Value')
+    handles.optoNoise = true;
+    set(handles.OptoOff,'Value',1);
+    set(handles.VaryAmplitude,'Value',0);
+    set(handles.VaryFrequency,'Value',0);
+    set(handles.VaryFreqAndAmp,'Value',0);
+else
+    handles.optoNoise = false;
+end
+%set(handles.ThresholdSlider,'Value',handles.V.videoParms.threshold);
+pause(0.2);
+guidata(hObject,handles);
+
+
+function OptoNoiseAmp_Callback(hObject, eventdata, handles)
+% hObject    handle to OptoNoiseAmp (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of OptoNoiseAmp as text
+%        str2double(get(hObject,'String')) returns contents of OptoNoiseAmp as a double
+handles = guidata(hObject);
+handles.optoNoiseAmpOut = str2double(get(hObject,'string')); % *pixpercm
+guidata(hObject,handles);
+
+% --- Executes during object creation, after setting all properties.
+function OptoNoiseAmp_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to OptoNoiseAmp (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+handles = guidata(hObject);
+set(hObject,'string','0');
+handles.optoNoiseAmpOut = str2double(get(hObject,'string')); % *pixpercm
+guidata(hObject,handles);
+
+
+% --- Executes on button press in OneSecondButton.
+function OneSecondButton_Callback(hObject, eventdata, handles)
+% hObject    handle to OneSecondButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of OneSecondButton
+set(handles.OneSecondButton,'Value',1);
+set(handles.RandButton,'Value',0);
+set(handles.OptoOff,'Value',1);
+set(handles.VaryAmplitude,'Value',0);
+set(handles.VaryFrequency,'Value',0);
+set(handles.VaryFreqAndAmp,'Value',0);
+handles.optoNoise = true;
+set(handles.OptoNoiseON,'Value',true);
+handles.ISI = 1;
+guidata(hObject,handles);
+
+% --- Executes on button press in RandButton.
+function RandButton_Callback(hObject, eventdata, handles)
+% hObject    handle to RandButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of RandButton
+set(handles.OneSecondButton,'Value',0);
+set(handles.RandButton,'Value',1);
+set(handles.OptoOff,'Value',1);
+set(handles.VaryAmplitude,'Value',0);
+set(handles.VaryFrequency,'Value',0);
+set(handles.VaryFreqAndAmp,'Value',0);
+handles.optoNoise = true;
+set(handles.OptoNoiseON,'Value',true);
+handles.ISI = 2;
+guidata(hObject,handles);
+

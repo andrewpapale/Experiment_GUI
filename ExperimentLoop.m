@@ -1,4 +1,4 @@
-function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,pulseMatrix,xset,yset,time,nx0,ny0,tx0,ty0,invertColors)
+function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,xset,yset,time,nx0,ny0,tx0,ty0,invertColors)
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 % 2018-08-14 AndyP, changed <ntX0,ntY0> -> <tX0,tY0>, corrected eroded
@@ -18,7 +18,8 @@ switchNT = nan;
 fillV = nan;
 DAQoutput = 0;
 % try
-IM = GetFrame(V);
+IM = GetFrame(V);   % 2019-05-17 Try multiple frames / trigger? Get only 1st frame for real-time processing? Output IM and IMnew from ExperimentLoop function
+% IMnew = first frame of IM, process IMnew in rest of loop
 timeOfFrameAcq = toc(tstart);
 IMbw2 = zeros(size(IM));
 % Track Mouse
@@ -264,7 +265,7 @@ if optoControl > 0
             if ~isnan(nx)
                 dur = freq_map(round(ny),round(nx));
                 amp = amp_map(round(ny),round(nx));
-                sigOut = amp*pulseMatrix(dur,:);
+                sigOut = amp*cat(2,ones(1,2),zeros(1,21-2));
             else
                 amp = 0;
                 dur = 0;
@@ -275,16 +276,22 @@ if optoControl > 0
             %sigOut(end+1) = 0;
             
         case 4 % random
-            amp = 0.1+(5+0.1)*rand(1,1);
-            freq = 1+(40+1)*rand(1,1);
-            sigOut = (amp/2)*(square(2*pi*freq*t,freq)+1);
-            %sigOut(end+1) = 0;
+            if ~isnan(x)
+                amp = 0.1+(5+0.1)*rand(1,1);
+                %freq = 1+(40+1)*rand(1,1);
+                sigOut = amp*cat(2,ones(1,1),zeros(1,21-1));
+                %sigOut(end+1) = 0;
+            else
+                amp = nan;
+                freq = nan;
+                sigOut = zeros(1,length(t));  
+            end
         otherwise
             error('unknown optoControl variable');
     end
     if DAQ.s3.ScansQueued==0
         queueOutputData(DAQ.s3, sigOut');
-        samplesQueued = samplesQueued+1;
+        %samplesQueued = samplesQueued+1;
         %disp(samplesQueued);
         if ~DAQ.s3.IsRunning
             %prepare(DAQ.s3);

@@ -22,7 +22,7 @@ function varargout = Experiment_GUI(varargin)
 
 % Edit the above text to modify the response to help Experiment_GUI
 
-% Last Modified by GUIDE v2.5 15-Feb-2019 13:19:33
+% Last Modified by GUIDE v2.5 17-May-2019 15:13:54
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -135,7 +135,7 @@ timeOutStop0 = [];
 P1 = []; P2 = []; P3 = [];
 loopRate = 50;
 %freqs = linspace(0.5,40,100);
-tstim_max = 1/20;
+tstim_max = 1/25;
 tstim_max_noise_exp = 3;
 t_stim=0:(1/handles.DAQ.s3.Rate):tstim_max;
 t_stim_noise_exp = 0:(1/handles.DAQ.s3.Rate):tstim_max_noise_exp;
@@ -145,10 +145,12 @@ if handles.spotTrial && handles.optoControl
     % define pulses
     Pmap = unique(handles.freq_map(:));
     nP = length(Pmap);
-    pulseMatrix = nan(nP,length(t_stim));
-    for iP=1:nP
-        pulseMatrix(iP,:) = cat(2,ones(1,Pmap(iP)),zeros(1,length(t_stim)-Pmap(iP)));
-    end
+%     pulseMatrix = nan(length(t_stim));
+%     pulseMatrix = cat(2,ones(1,
+%     for iP=1:nP
+%         
+%         %pulseMatrix(iP,:) = cat(2,ones(1,Pmap(iP)),zeros(1,length(t_stim)-Pmap(iP)));
+%     end
 else
     pulseMatrix=[];
     
@@ -187,9 +189,9 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.checkbox1.Value
     end
     frameNum = frameNum+1;
     %% main experiment loop
-    handles.invertColors = handles.BlackMouse.Value;
-    
-    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,pulseMatrix,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
+    %handles.invertColors = handles.BlackMouse.Value;
+    handles.invertColors = 0;
+    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
     
 %     %disp(etime(clock,tstim));
 %     if etime(clock,tstim) > ISItime1 && ~RewardZoneOn & (x < 500 && y > 100)
@@ -270,7 +272,7 @@ end
         %cla('reset'); % old
         delete(P2); delete(P3);
         %imagesc(IM); hold on; axis xy; colormap('gray'); % old
-        set(hImage,'CData',IM); hold on; axis xy;
+        set(hImage,'CData',IM); hold on; axis xy; % % 2019-05-17 Try multiple frames / trigger? Change IM to IMnew
         %2019-02-27 much faster
         P2 = plot(x,y,'ro','markersize',20); P3 = plot(nx,ny,'gx','markersize',10); %line([x,nx],[y,ny],'color','r');
         set(gca,'Position',[hAxes.Position(1),hAxes.Position(2),hAxes.Position(3),hAxes.Position(4)]);
@@ -519,6 +521,14 @@ set(handles.Start,'Value',0);
 set(handles.checkbox1,'Value',1);
 
 videoStr = inputdlg('Enter a video name');
+D = dir('*.avi');
+videoStr = strcat(videoStr,'.avi');
+for iD=1:length(D)
+    if strcmp(videoStr,D(iD).name)
+        warning('File with that name already exists');
+        videoStr{1} = ''; 
+    end
+end
 if ~isempty(videoStr{1})
     handles.V.videoFP = VideoWriter(videoStr{1},'Grayscale AVI');
     handles.V.videoFP.FrameRate = round(38);
@@ -528,12 +538,11 @@ if ~isempty(videoStr{1})
     pause(0.3);
     handles.recordtimer = clock;
     guidata(hObject,handles);
-else
-    disp('Already Recording');
+    set(handles.checkbox1,'Value',0);
+    guidata(hObject,handles);
 end
 
-set(handles.checkbox1,'Value',0);
-guidata(hObject,handles);
+        
 
 % --- Executes on button press in SubtractBkg.
 function SubtractBkg_Callback(hObject, eventdata, handles)
@@ -792,42 +801,42 @@ function VaryAmplitude_Callback(hObject, eventdata, handles)
 
 % Hint: get(hObject,'Value') returns toggle state of VaryAmplitude
 if get(hObject,'Value')==1
-    handles.optoControl = 1;
-    set(handles.OptoOff,'Value',0);
-    set(handles.VaryFrequency,'Value',0);
-    set(handles.VaryFreqAndAmp,'Value',0);
-    guidata(hObject,handles);
-end
-
-% --- Executes on button press in VaryFrequency.
-function VaryFrequency_Callback(hObject, eventdata, handles)
-% hObject    handle to VaryFrequency (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of VaryFrequency
-if get(hObject,'Value')==1
-    handles.optoControl = 2;
-    set(handles.OptoOff,'Value',0);
-    set(handles.VaryAmplitude,'Value',0);
-    set(handles.VaryFreqAndAmp,'Value',0);
-    guidata(hObject,handles);
-end
-
-% --- Executes on button press in VaryFreqAndAmp.
-function VaryFreqAndAmp_Callback(hObject, eventdata, handles)
-% hObject    handle to VaryFreqAndAmp (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of VaryFreqAndAmp
-if get(hObject,'Value')==1
     handles.optoControl = 3;
     set(handles.OptoOff,'Value',0);
-    set(handles.VaryAmplitude,'Value',0);
-    set(handles.VaryFrequency,'Value',0);
+%     set(handles.VaryFrequency,'Value',0);
+%     set(handles.VaryFreqAndAmp,'Value',0);
     guidata(hObject,handles);
 end
+
+% % --- Executes on button press in VaryFrequency.
+% function VaryFrequency_Callback(hObject, eventdata, handles)
+% % hObject    handle to VaryFrequency (see GCBO)
+% % eventdata  reserved - to be defined in a future version of MATLAB
+% % handles    structure with handles and user data (see GUIDATA)
+% 
+% % Hint: get(hObject,'Value') returns toggle state of VaryFrequency
+% if get(hObject,'Value')==1
+%     handles.optoControl = 2;
+%     set(handles.OptoOff,'Value',0);
+%     set(handles.VaryAmplitude,'Value',0);
+%     set(handles.VaryFreqAndAmp,'Value',0);
+%     guidata(hObject,handles);
+% end
+
+% % --- Executes on button press in VaryFreqAndAmp.
+% function VaryFreqAndAmp_Callback(hObject, eventdata, handles)
+% % hObject    handle to VaryFreqAndAmp (see GCBO)
+% % eventdata  reserved - to be defined in a future version of MATLAB
+% % handles    structure with handles and user data (see GUIDATA)
+% 
+% % Hint: get(hObject,'Value') returns toggle state of VaryFreqAndAmp
+% if get(hObject,'Value')==1
+%     handles.optoControl = 3;
+%     set(handles.OptoOff,'Value',0);
+%     set(handles.VaryAmplitude,'Value',0);
+%     set(handles.VaryFrequency,'Value',0);
+%     guidata(hObject,handles);
+% end
 
 
 % --- Executes on button press in checkbox1.
@@ -950,9 +959,9 @@ function OptoNoiseON_Callback(hObject, eventdata, handles)
 if get(handles.OptoNoiseON,'Value')
     handles.optoNoise = true;
     set(handles.OptoOff,'Value',1);
-    set(handles.VaryAmplitude,'Value',0);
-    set(handles.VaryFrequency,'Value',0);
-    set(handles.VaryFreqAndAmp,'Value',0);
+%     set(handles.VaryAmplitude,'Value',0);
+%     set(handles.VaryFrequency,'Value',0);
+%     set(handles.VaryFreqAndAmp,'Value',0);
 else
     handles.optoNoise = false;
 end
@@ -999,9 +1008,9 @@ function OneSecondButton_Callback(hObject, eventdata, handles)
 set(handles.OneSecondButton,'Value',1);
 set(handles.RandButton,'Value',0);
 set(handles.OptoOff,'Value',1);
-set(handles.VaryAmplitude,'Value',0);
-set(handles.VaryFrequency,'Value',0);
-set(handles.VaryFreqAndAmp,'Value',0);
+% set(handles.VaryAmplitude,'Value',0);
+% set(handles.VaryFrequency,'Value',0);
+% set(handles.VaryFreqAndAmp,'Value',0);
 handles.optoNoise = true;
 set(handles.OptoNoiseON,'Value',true);
 handles.ISI = 1;
@@ -1018,10 +1027,25 @@ set(handles.OneSecondButton,'Value',0);
 set(handles.RandButton,'Value',1);
 set(handles.OptoOff,'Value',1);
 set(handles.VaryAmplitude,'Value',0);
-set(handles.VaryFrequency,'Value',0);
-set(handles.VaryFreqAndAmp,'Value',0);
+%set(handles.VaryFrequency,'Value',0);
+%set(handles.VaryFreqAndAmp,'Value',0);
 handles.optoNoise = true;
 set(handles.OptoNoiseON,'Value',true);
 handles.ISI = 2;
 guidata(hObject,handles);
 
+
+% --- Executes on button press in RandomFreqAmp.
+function RandomFreqAmp_Callback(hObject, eventdata, handles)
+% hObject    handle to RandomFreqAmp (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of RandomFreqAmp
+if get(hObject,'Value')==1
+    handles.optoControl = 4;
+    set(handles.OptoOff,'Value',0);
+%     set(handles.VaryFrequency,'Value',0);
+%     set(handles.VaryFreqAndAmp,'Value',0);
+    guidata(hObject,handles);
+end

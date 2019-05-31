@@ -11,7 +11,7 @@ DAQ.s3 = daq.createSession('ni'); % laser
 addAnalogOutputChannel(DAQ.s3,'Dev1','ao0','Voltage');
 DAQ.s3.IsContinuous = true;
 DAQ.s3.NotifyWhenScansQueuedBelow = 5;
-DAQ.s3.Rate = 500;
+DAQ.s3.Rate = 800;
 %outputSingleScan(DAQ.s3,0); 
 
 % DAQ.s4 = daq.createSession('ni');

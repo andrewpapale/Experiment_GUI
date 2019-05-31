@@ -22,7 +22,7 @@ function varargout = Experiment_GUI(varargin)
 
 % Edit the above text to modify the response to help Experiment_GUI
 
-% Last Modified by GUIDE v2.5 21-May-2019 14:40:26
+% Last Modified by GUIDE v2.5 31-May-2019 14:49:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -112,6 +112,8 @@ end
 guidata(hObject,handles);
 %try
 frameNum = 0;
+x = nan;
+y = nan;
 x0 = [];
 y0 = [];
 nx0 = [];
@@ -128,24 +130,22 @@ fillV0 = [];
 switchNT0 = [];
 mouseLength0 = [];
 mouseArea0 = [];
-sigOut0 = [];
+tQueue = [];
 timeOut0 = [];
+t_stim_noise_exp = [];
 timeOutStop0 = [];
 ISI = [];
-Qcounter = 0;
-Qcounter0 = [];
-frameCt = [];
-frameQ = [];
-IR = [];
-sigOut = [];
+rn = 3-(3-1)*rand(1,1);
+rnA = 0;
+AmpOutNoise = [];
 
 P1 = []; P2 = []; P3 = [];
 loopRate = 50;
 %freqs = linspace(0.5,40,100);
 tstim_max = 1/25;
-tstim_max_noise_exp = 3.005;
 t_stim=0:(1/handles.DAQ.s3.Rate):tstim_max;
-t_stim_noise_exp = 0:(1/handles.DAQ.s3.Rate):tstim_max_noise_exp;
+tstim_max_noise_exp = 0.25;
+
 
 %tstim = clock;
 if handles.spotTrial && handles.optoControl
@@ -180,9 +180,11 @@ if handles.spotTrial; R = rectangle('Position',[px py 2*radius 2*radius],'Curvat
 
 r = robotics.Rate(loopRate);
 tstart = tic;
+etlaststim = tstart;
 
 while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
     t1 = clock;
+    
     handles = guidata(hObject);
     handles.V.videoParms.threshold = str2double(handles.ThresholdText.String);
     optoControl = handles.optoControl;
@@ -200,68 +202,59 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
     handles.invertColors = 0;
     [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
     
-    %     %disp(etime(clock,tstim));
-    %     if etime(clock,tstim) > ISItime1 && ~RewardZoneOn & (x < 500 && y > 100)
-    %         DAQgo = true;
-    %         tstim = clock;
-    %         if ~isempty(ISItime)
-    %             ISItime(1)=[];
-    %         end
-    %     else
-    %         DAQgo = false;
-    %         if handles.DAQ.s3.ScansQueued==1 & ~handles.DAQ.s3.IsRunning
-    %             prepare(handles.DAQ.s3);
-    %         end
-    %     end
-    % ,handles.optoNoiseAmpOut,handles.optoNoise,ISItime1,DAQgo
-    %         sigOut = zeros(length(t),1);
-    %         ix = 1:length(sigOut);
-    %         sigOut(ix(mod(ix,5)==0))= optoNoiseAmpOut;
-    %         sigOut(end) = 0;
     if handles.optoNoise
-        IR = cat(1,IR,handles.DAQ.s3.IsRunning);
         if length(x0) > 10
             xU = sum(~isnan(x0(end-10:end)))>5;
         else
             xU = 0;
+            etlaststim = tic;
         end
-        if (~RewardZoneOn && ~(x > 500 && y < 100)) && xU % output signal
-            sigOut = zeros(length(t_stim_noise_exp),1);
-            ix = 1:length(sigOut);
-            switch handles.ISI
-                case 1
-                    ix(1)=1;
-                    ix(1+handles.DAQ.s3.Rate)=1;
-                    ix(1+2*handles.DAQ.s3.Rate)=1;
-                    ix(1+3*handles.DAQ.s3.Rate)=1;
-                    sigOut(ix==1) = handles.optoNoiseAmpOut;
-                case 2
-                    ISItime =(3)-(3-1)*rand(3,1);
-                    ISItime = cumsum(ISItime);
-                    ix = interp1(t_stim_noise_exp,ix,ISItime,'nearest');
-                    ix(isnan(ix))=[];
-                    sigOut(ix)= handles.optoNoiseAmpOut;
-            end
-            sigOut(end-3:end)=0;
-            ix(ix >= length(sigOut)-3)=[];
+        
+        stimclock = toc(etlaststim);
+        switch handles.ISI
+            case 1
+                qGO = stimclock >=1-0.1; 
+                stimGO = stimclock >= 1; % 1 sec
+            case 2
+                qGO = stimclock > rn-0.1;
+                stimGO = stimclock > rn; % rand 1-3s interval
+        end
+        
+        nogozone = 200 > sqrt((x-576).^2+(y-15).^2);
+        
+        if qGO && (~RewardZoneOn && ~nogozone) && xU && handles.DAQ.s3.ScansQueued < 3 % output signal
+            AMPmatrix = [0 5]; % change this to change amplitudes for opto noise 2019-05-31 AndyP and TK
+            rnAlast = rnA;
+            rnA = randi(length(AMPmatrix),1);
             
-            Qcounter = Qcounter + 1;
-            frameCt = cat(1,frameCt,ix);
-            frameQ = cat(1,frameQ,(1:length(ix))');
+            if rnAlast==1 && rnA==1
+                rnA = 2;
+            end
+            t_stim_noise_exp = 0:(1/handles.DAQ.s3.Rate):tstim_max_noise_exp;
+            sigOut = zeros(length(t_stim_noise_exp),1); %returns an array of zeros
+            sigOut(1:40) = repmat(AMPmatrix(rnA),[40,1]);
+            rn = 3-(3-1)*rand(1,1);
+            
             queueOutputData(handles.DAQ.s3, sigOut);
-            %disp(sprintf('Qcounter=%d queuing Data',Qcounter)); %#ok<DSPS>
-            
-            if ~handles.DAQ.s3.IsRunning && handles.DAQ.s3.ScansQueued > 3
-                Qcounter0 = cat(1,Qcounter0,Qcounter);
-                %disp(sprintf('Qcounter=%d Data Out',Qcounter)); %#ok<DSPS>
-                Qcounter = 0;
-                %sigOut0 = cat(1,sigOut0,sigOut);
-                timeOut0 = cat(1,timeOut0,timeofFrameAcq);
-                startBackground(handles.DAQ.s3);
-            end
-        elseif (RewardZoneOn || ~xU || (x > 500 && y < 100)) % signal is outputting
-            timeOutStop0 = cat(1,timeOutStop0,timeofFrameAcq);
+            qGO = 0;
+            tQueue = cat(1,tQueue,timeofFrameAcq);
+        end
+        
+%         if ~handles.DAQ.s3.IsRunning && handles.DAQ.s3.ScansQueued > 3
+%             prepare(handles.DAQ.s3);
+%         end
+        
+        if ~mod(frameNum,nUpdate)==0 && ~handles.DAQ.s3.IsRunning && handles.DAQ.s3.ScansQueued > 3 && stimGO && ~(RewardZoneOn || ~xU || nogozone)
+            stimGO = 0;
+            startBackground(handles.DAQ.s3);
+            etlaststim = tic;
+            timeOut0 = cat(1,timeOut0,timeofFrameAcq);
+            AmpOutNoise = cat(1,AmpOutNoise,AMPmatrix(rnA));
+        end
+        
+        if handles.DAQ.s3.IsRunning && (RewardZoneOn || ~xU || nogozone) % signal is outputting
             stop(handles.DAQ.s3); % long ~0.1Hz delay
+            timeOutStop0 = cat(1,timeOutStop0,timeofFrameAcq);
         end
         
     end
@@ -457,27 +450,7 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
             
             % 2019-05-22 AndyP and TK, convert Qcounter0, frameCt, and
             % frameQ into timestamps based on time0, frame0
-            
-            timeStim = nan(size(frameCt));
-            
-            DAQloop = length(sigOut)./500;
-            sigTimes = frameCt./length(sigOut)*DAQloop;
-            
-            warning('assuming 3 pulses / signal');
-            iC = 1;
-            for iO=1:length(timeOut0) % queue is flushed
-                k0 = Qcounter0(iO); % number of queued signals @ queue flush iO
-                for iQ=1:sum(k0) % for each queued signal...
-                    nP = 3; % WARNING assumes 3 pulses / signal!!
-                    for iP=1:sum(nP) % for each pulse...
-                        timeStim(iC)=timeOut0(iO)+DAQloop*(iQ-1)+sigTimes(iC); % Add flush frame (iO) to length of signal * number of queued signals + frame of pulse
-                        iC = iC+1;
-                    end
-                end
-            end
-            
-            frameStim = interp1(time0,frame0,timeStim,'nearest');
-            
+
             V = [];
             if ~isempty(handles.V)
                 V = handles.V;
@@ -494,7 +467,7 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
                 daystr = mat2str(temp(3));
             end
             saveStr = strcat(mat2str(temp(1)),'-',monstr,'-',daystr,'_',mat2str(temp(4)),'_',mat2str(temp(5)));
-            save(strcat(saveStr,'.mat'),'IR','timeStim','frameStim','fixedQueueTimeBugforOptoNoise','frameQ','frameCt','Qcounter0','ISI','timeOutStop0','timeOut0','sigOut0','t_stim_noise_exp','t_stim','optoNoiseAmpOut','optoNoise','manualCamera','fixedRadiusBug','dur0','amp0','loopRate','tstim_max','optoControl','frame0','time0','r','tx0','ty0','mouseLength0','pixpercm','radiusAroundSpot','trialNum','trialStartT','foundSpotT','maxSessT','nPelletsPerTrial','spotTrial','x0','y0','nx0','ny0','V','cx','cy','mouseArea0','switchNT0','fillV0','useBody','ITI','autoReward','gauss_width','fanx','fany');
+            save(strcat(saveStr,'.mat'),'AmpOutNoise','tQueue','fixedQueueTimeBugforOptoNoise','ISI','timeOutStop0','timeOut0','t_stim_noise_exp','t_stim','optoNoiseAmpOut','optoNoise','manualCamera','fixedRadiusBug','dur0','amp0','loopRate','tstim_max','optoControl','frame0','time0','r','tx0','ty0','mouseLength0','pixpercm','radiusAroundSpot','trialNum','trialStartT','foundSpotT','maxSessT','nPelletsPerTrial','spotTrial','x0','y0','nx0','ny0','V','cx','cy','mouseArea0','switchNT0','fillV0','useBody','ITI','autoReward','gauss_width','fanx','fany');
             
             handles.RecordIt = 0;
             soundsc(handles.endtone);
@@ -1030,34 +1003,6 @@ pause(0.2);
 guidata(hObject,handles);
 
 
-function OptoAmp_Callback(hObject, eventdata, handles)
-% hObject    handle to OptoAmp (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of OptoAmp as text
-%        str2double(get(hObject,'String')) returns contents of OptoAmp as a double
-handles = guidata(hObject);
-handles.optoNoiseAmpOut = str2double(get(hObject,'string')); % *pixpercm
-guidata(hObject,handles);
-
-% --- Executes during object creation, after setting all properties.
-function OptoAmp_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to OptoAmp (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-handles = guidata(hObject);
-set(hObject,'string','0');
-handles.optoNoiseAmpOut = str2double(get(hObject,'string')); % *pixpercm
-guidata(hObject,handles);
-
-
 % --- Executes on button press in OneSecondButton.
 function OneSecondButton_Callback(hObject, eventdata, handles)
 % hObject    handle to OneSecondButton (see GCBO)
@@ -1138,3 +1083,39 @@ function VaryOptoAmp_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+
+function OptoNoiseAmpOut_Callback(hObject, eventdata, handles)
+% hObject    handle to OptoNoiseAmpOut (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of OptoNoiseAmpOut as text
+%        str2double(get(hObject,'String')) returns contents of OptoNoiseAmpOut as a double
+handles.optoNoiseAmpOut = handles.OptoNoiseAmpOut.Value;
+guidata(hObject,handles);
+
+% guidata(hObject,handles);
+% pause(0.01);
+% 
+% if handles.optoNoiseAmpOut > 5
+%     error('opto noise amp out must be < 5');
+% elseif handles.optoNoiseAmpOut < 0
+%     error('opto noise amp out must be > 0');
+% end
+
+% --- Executes during object creation, after setting all properties.
+function OptoNoiseAmpOut_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to OptoNoiseAmpOut (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.optoNoiseAmpOut = '';
+guidata(hObject,handles);

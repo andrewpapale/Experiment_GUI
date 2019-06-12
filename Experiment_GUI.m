@@ -138,6 +138,7 @@ ISI = [];
 rn = 3-(3-1)*rand(1,1);
 rnA = 0;
 AmpOutNoise = [];
+optoNoise = handles.optoNoise;
 
 P1 = []; P2 = []; P3 = [];
 loopRate = 50;
@@ -182,7 +183,7 @@ r = robotics.Rate(loopRate);
 tstart = tic;
 etlaststim = tstart;
 
-while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
+while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
     t1 = clock;
     
     handles = guidata(hObject);
@@ -202,7 +203,7 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
     handles.invertColors = 0;
     [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
     
-    if handles.optoNoise
+    if optoNoise
         if length(x0) > 10
             xU = sum(~isnan(x0(end-10:end)))>5;
         else
@@ -252,8 +253,13 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
             AmpOutNoise = cat(1,AmpOutNoise,AMPmatrix(rnA));
         end
         
-        if handles.DAQ.s3.IsRunning && (RewardZoneOn || ~xU || nogozone) % signal is outputting
-            stop(handles.DAQ.s3); % long ~0.1Hz delay
+        if ~handles.DAQ.s3.IsRunning && (RewardZoneOn || ~xU || nogozone) % signal is outputting
+            sigOut = zeros(100,1); %returns an array of zeros
+            queueOutputData(handles.DAQ.s3, sigOut);
+            startBackground(handles.DAQ.s3);
+            %stop(handles.DAQ.s3); % long ~0.1Hz delay, causing long
+            %outputs at high voltage?
+            
             timeOutStop0 = cat(1,timeOutStop0,timeofFrameAcq);
         end
         
@@ -279,7 +285,7 @@ while ~handles.Exit.Value || ~handles.stopLoop || ~handles.StopLoopCHK.Value
     
     
     %% record video
-    if handles.RecordIt && ~handles.StopRecChk.Value && etime(t1,handles.recordtimer)>2
+    if handles.RecordIt && ~handles.StopRecChk.Value
         handles = guidata(hObject);
         try
             writeVideo(handles.V.videoFP, IM);
@@ -558,9 +564,9 @@ if ~isempty(videoStr{1})
     handles.V.videoFP = VideoWriter(videoStr{1},'Grayscale AVI');
     handles.V.videoFP.FrameRate = round(38);
     open(handles.V.videoFP);
-    fprintf('Starting Video, time: %s, frame rate: %0.1f \n',datestr(clock), 38);
+    fprintf('Starting Video, time: %s, frame rate: %0.1f \n wait 2s to start loop \n',datestr(clock), 38);
     handles.RecordIt=1;
-    pause(0.3);
+    pause(2);
     handles.recordtimer = clock;
     guidata(hObject,handles);
     set(handles.StopLoopCHK,'Value',0);

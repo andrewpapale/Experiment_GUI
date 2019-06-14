@@ -211,7 +211,7 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
             xU = sum(~isnan(x0(end-10:end)))>5;
         else
             xU = 0;
-            % etlaststim = tic; 2019-06-14 AndyP and TK this is wrong!!!
+            etlaststim = tic;
         end
         
         stimclock = toc(etlaststim);
@@ -263,9 +263,9 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
             startBackground(handles.DAQ.s3);
             %stop(handles.DAQ.s3); % long ~0.1Hz delay, causing long
             timeOutStop0 = cat(1,timeOutStop0,timeofFrameAcq);
-            etlaststim = tic;
+            
             Qct = 0;
-            %timeOutQ0 = cat(1,timeOutQ0,timeofFrameAcq);
+            $timeOutQ0 = cat(1,timeOutQ0,timeofFrameAcq);
             %outputs at high voltage?
             
             

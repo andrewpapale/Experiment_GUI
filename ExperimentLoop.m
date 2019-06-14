@@ -1,4 +1,4 @@
-function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,xset,yset,time,nx0,ny0,tx0,ty0,invertColors)
+function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput,tsincelaststim] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,xset,yset,time,nx0,ny0,tx0,ty0,invertColors,tsincelaststim)
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 % 2018-08-14 AndyP, changed <ntX0,ntY0> -> <tX0,tY0>, corrected eroded
@@ -233,6 +233,12 @@ if nC>0
     end
 end
 if optoControl > 0
+    
+    % TK write code to output a pulse every 500ms
+    
+    tsincelaststim = tic;
+    
+    
     switch optoControl
         case 1 % vary amp
             %             freq=15;

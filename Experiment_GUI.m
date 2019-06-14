@@ -203,7 +203,7 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
     %% main experiment loop
     %handles.invertColors = handles.BlackMouse.Value;
     handles.invertColors = 0;
-    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors);
+    [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput,tsincelaststim] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors,tsincelaststim);
     
     
     if optoNoise
@@ -1107,7 +1107,7 @@ function OptoNoiseAmpOut_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of OptoNoiseAmpOut as text
 %        str2double(get(hObject,'String')) returns contents of OptoNoiseAmpOut as a double
-handles.optoNoiseAmpOut = handles.OptoNoiseAmpOut.Value;
+handles.optoNoiseAmpOut = str2double(handles.OptoNoiseAmpOut.String);
 guidata(hObject,handles);
 
 % guidata(hObject,handles);

@@ -22,7 +22,7 @@ function varargout = Experiment_GUI(varargin)
 
 % Edit the above text to modify the response to help Experiment_GUI
 
-% Last Modified by GUIDE v2.5 31-May-2019 14:49:26
+% Last Modified by GUIDE v2.5 17-Jun-2019 10:56:12
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -187,7 +187,7 @@ Qct = 0;
 
 while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
     t1 = clock;
-    disp(Qct);
+    %disp(Qct);
     handles = guidata(hObject);
     handles.V.videoParms.threshold = str2double(handles.ThresholdText.String);
     optoControl = handles.optoControl;
@@ -203,6 +203,7 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
     %% main experiment loop
     %handles.invertColors = handles.BlackMouse.Value;
     handles.invertColors = 0;
+    tsincelaststim = NaN;
     [IM,x,y,~,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t_stim,timeofFrameAcq,amp,dur,mouseArea,switchNT,fillV,DAQoutput,tsincelaststim] = ExperimentLoop(handles.V,handles.DAQ,frameNum,handles.amp_map,lastCycleOn,tswitch,handles.freq_map,t_stim,optoControl,tstart,x0,y0,time0,nx0,ny0,tx0,ty0,handles.invertColors,tsincelaststim);
     
     
@@ -217,8 +218,10 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
         stimclock = toc(etlaststim);
         switch handles.ISI
             case 1
-                qGO = stimclock >=1-0.1; 
-                stimGO = stimclock >= 1; % 1 sec
+               % qGO = stimclock >=1-0.1; 
+               % stimGO = stimclock >= 1; % 1 sec
+                qGO = stimclock > rn-0.1; %TK 6/17/19
+                stimGO = stimclock > rn; % rand 1-3s interval %TK 6/17/19
             case 2
                 qGO = stimclock > rn-0.1;
                 stimGO = stimclock > rn; % rand 1-3s interval
@@ -227,7 +230,12 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
         nogozone = 200 > sqrt((x-576).^2+(y-15).^2);
         
         if qGO && ~(RewardZoneOn || nogozone) && xU && Qct==0 % queue signal
-            AMPmatrix = [0 5]; % change this to change amplitudes for opto noise 2019-05-31 AndyP and TK
+            %6/17/19 TK added conditional to choose 0V ISI R 1s-3s stims
+            if handles.ISI == 2
+                AMPmatrix = [0 5]; % change this to change amplitudes for opto noise 2019-05-31 AndyP and TK
+            else
+                AMPmatrix = [0 0];
+            end
             rnAlast = rnA;
             rnA = randi(length(AMPmatrix),1);
             
@@ -1023,6 +1031,7 @@ function OneSecondButton_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+%This button will now be used for 0V random stims TK 6/17/19
 % Hint: get(hObject,'Value') returns toggle state of OneSecondButton
 set(handles.OneSecondButton,'Value',1);
 set(handles.RandomAmp,'Value',0);

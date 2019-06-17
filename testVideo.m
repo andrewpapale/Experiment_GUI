@@ -11,8 +11,6 @@ V1.FrameRate = 48;
 open(V1);
 for iF=1:nF
     F = figure(1); clf;
-    set(gcf,'Visible','off') % turns current figure "off"
-    set(0,'DefaultFigureVisible','off'); % all subsequent figures "off"
     vid = V.readFrame;
     vid = squeeze(vid(:,:,1));
     imagesc(imadjust(uint8(vid)));
@@ -27,6 +25,5 @@ for iF=1:nF
     F1 = getframe(F);
     F1.cdata = F1.cdata(:,:,1);
     writeVideo(V1,F1);
-  
 end
 close(V1);

@@ -135,8 +135,8 @@ timeOut0 = [];
 t_stim_noise_exp = [];
 timeOutStop0 = [];
 ISI = [];
-rn = 3-(3-1)*rand(1,1);
-rnA = 0;
+rn = 3-(3-0.5)*rand(1,1);
+rnA = 2;
 AmpOutNoise = [];
 timeOutQ0 = [];
 optoNoise = handles.optoNoise;
@@ -184,6 +184,7 @@ r = robotics.Rate(loopRate);
 tstart = tic;
 etlaststim = tstart;
 Qct = 0;
+ltNlast = handles.trialNum;
 
 while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
     t1 = clock;
@@ -228,23 +229,30 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
         end
         
         nogozone = 200 > sqrt((x-576).^2+(y-15).^2);
+        edge = x < 50 | x > size(IM,2)-50 | y < 50 | y > size(IM,1)-50;
         
-        if qGO && ~(RewardZoneOn || nogozone) && xU && Qct==0 % queue signal
+        
+        if qGO && ~(RewardZoneOn || nogozone || edge) && xU && Qct==0 % queue signal
             %6/17/19 TK added conditional to choose 0V ISI R 1s-3s stims
             if handles.ISI == 2
                 AMPmatrix = [0 5]; % change this to change amplitudes for opto noise 2019-05-31 AndyP and TK
-            else
+            elseif handles.ISI==1
                 AMPmatrix = [0 0];
             end
-            rnAlast = rnA;
-            rnA = randi(length(AMPmatrix),1);
-            
-            if rnAlast==1 && rnA==1
-                rnA = 2;
+           
+            if handles.trialNum > ltNlast
+                rnAlast = rnA;
+                rnA = randi(length(AMPmatrix),1);
+                ltNlast = handles.trialNum;
+                if rnAlast==1 && rnA==1
+                    rnA = 2;
+                end
             end
+            
+
             sigOut = zeros(length(t_stim_noise_exp),1); %returns an array of zeros
             sigOut(1:40) = repmat(AMPmatrix(rnA),[40,1]);
-            rn = 3-(3-1)*rand(1,1);
+            rn = 3-(3-0.5)*rand(1,1);
             
             queueOutputData(handles.DAQ.s3, sigOut);
             Qct = Qct + 1;
@@ -256,7 +264,7 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
 %             prepare(handles.DAQ.s3);
 %         end
         
-        if ~mod(frameNum,nUpdate)==0 && ~handles.DAQ.s3.IsRunning && Qct > 0 && stimGO && xU && ~(RewardZoneOn || nogozone)
+        if ~mod(frameNum,nUpdate)==0 && ~handles.DAQ.s3.IsRunning && Qct > 0 && stimGO && xU && ~(RewardZoneOn || nogozone || edge)
             stimGO = 0;
             startBackground(handles.DAQ.s3);
             Qct = 0;
@@ -265,7 +273,7 @@ while ~handles.Exit.Value || ~handles.StopLoopCHK.Value
             AmpOutNoise = cat(1,AmpOutNoise,AMPmatrix(rnA));
         end
         
-        if ~handles.DAQ.s3.IsRunning && (RewardZoneOn || ~xU || nogozone) && Qct==0 % signal is outputting
+        if ~handles.DAQ.s3.IsRunning && (RewardZoneOn || ~xU || nogozone || edge) && Qct==0 % signal is outputting
             sigOut = zeros(201,1); %returns an array of zeros
             queueOutputData(handles.DAQ.s3, sigOut);
             startBackground(handles.DAQ.s3);

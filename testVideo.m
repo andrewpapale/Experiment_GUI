@@ -1,7 +1,7 @@
 % testVideo LED
 % 2019-06-06 AndyP
 
-V = VideoReader('512313-2019-06-17-5.avi');
+V = VideoReader('528818-2019-06-18-1.avi');
 nF = length(x0);
 
 ix = interp1(time0,frame0,timeOut0,'nearest');

@@ -1,4 +1,4 @@
-function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput,tsincelaststim] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,xset,yset,time,nx0,ny0,tx0,ty0,invertColors,tsincelaststim)
+function [IM,x,y,IMbw,nx,ny,lastCycleOn,tswitch,tx,ty,mouseLength,t,timeOfFrameAcq,amp,dur,mouseArea0,switchNT,fillV,DAQoutput,tsincelaststim] = ExperimentLoop(V,DAQ,frameNum,amp_map,lastCycleOn,tswitch,freq_map,t,optoControl,tstart,xset,yset,time,nx0,ny0,tx0,ty0)
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 % 2018-08-14 AndyP, changed <ntX0,ntY0> -> <tX0,tY0>, corrected eroded
@@ -23,13 +23,8 @@ IM = GetFrame(V);   % 2019-05-17 Try multiple frames / trigger? Get only 1st fra
 timeOfFrameAcq = toc(tstart);
 IMbw2 = zeros(size(IM));
 % Track Mouse
-if invertColors
-    IMg = imcomplement(IM)-imcomplement(V.baseFrame);
-    IMbw = IMg<V.videoParms.threshold;
-else
-    IMg = IM-V.baseFrame;
-    IMbw = IMg>V.videoParms.threshold;
-end
+IMg = IM-V.baseFrame;
+IMbw = IMg>V.videoParms.threshold;
 IMbw = bwmorph(IMbw,'majority');
 switchNT = 0;
 fillV = 0;
@@ -232,83 +227,83 @@ if nC>0
     else
     end
 end
-if optoControl > 0
-    
-    % TK write code to output a pulse every 500ms
-    
-    tsincelaststim = tic;
-    
-    
-    switch optoControl
-        case 1 % vary amp
-            %             freq=15;
-            
-            if ~isnan(x)
-                amp = amp_map(round(y),round(x));
-            else
-                amp = 0;
-            end
-            %sigOut = [amp*ones(3,1);zeros(15,1)]';
-            sigOut = repmat(amp,[length(t),1])';
-            %             sigOut = (amp/2)*(square(2*pi*freq*t,freq)+1);
-            %             sigOut(end+1) = 0;
-            %             disp(length(sigOut));
-            
-            
-        case 2 % vary freq
-            amp=2.5;
-            if ~isnan(x)
-                freq = freq_map(round(y),round(x));
-            else
-                freq = 15;
-                amp = 0;
-            end
-            % sigOut = repmat(amp,[length(t),1])';
-            %sigOut = (amp/2)*(square(2*pi*freq*t,freq)+1);
-            %sigOut(end+1) = 0;
-        case 3 % vary amp and freq
-            
-            if ~isnan(nx)
-                dur = freq_map(round(ny),round(nx));
-                amp = amp_map(round(ny),round(nx));
-                sigOut = amp*cat(2,ones(1,2),zeros(1,21-2));
-            else
-                amp = 0;
-                dur = 0;
-                sigOut = zeros(1,length(t));
-            end
-            %sigOut = repmat(amp,[length(t),1])';
-            
-            %sigOut(end+1) = 0;
-            
-        case 4 % random
-            if ~isnan(x)
-                amp = 0.1+(5+0.1)*rand(1,1);
-                %freq = 1+(40+1)*rand(1,1);
-                sigOut = amp*cat(2,ones(1,1),zeros(1,21-1));
-                %sigOut(end+1) = 0;
-            else
-                amp = nan;
-                freq = nan;
-                sigOut = zeros(1,length(t));  
-            end
-        otherwise
-            error('unknown optoControl variable');
-    end
-    if DAQ.s3.ScansQueued==0
-        queueOutputData(DAQ.s3, sigOut');
-        %samplesQueued = samplesQueued+1;
-        %disp(samplesQueued);
-        if ~DAQ.s3.IsRunning
-            %prepare(DAQ.s3);
-        end
-    end
-    if ~DAQ.s3.IsRunning
-        startBackground(DAQ.s3);
-        %disp('outputting new sample');
-    end
-    
-end
+% if optoControl > 0
+%     
+%     % TK write code to output a pulse every 500ms
+%     
+%     tsincelaststim = tic;
+%     
+%     
+%     switch optoControl
+%         case 1 % vary amp
+%             %             freq=15;
+%             
+%             if ~isnan(x)
+%                 amp = amp_map(round(y),round(x));
+%             else
+%                 amp = 0;
+%             end
+%             %sigOut = [amp*ones(3,1);zeros(15,1)]';
+%             sigOut = repmat(amp,[length(t),1])';
+%             %             sigOut = (amp/2)*(square(2*pi*freq*t,freq)+1);
+%             %             sigOut(end+1) = 0;
+%             %             disp(length(sigOut));
+%             
+%             
+%         case 2 % vary freq
+%             amp=2.5;
+%             if ~isnan(x)
+%                 freq = freq_map(round(y),round(x));
+%             else
+%                 freq = 15;
+%                 amp = 0;
+%             end
+%             % sigOut = repmat(amp,[length(t),1])';
+%             %sigOut = (amp/2)*(square(2*pi*freq*t,freq)+1);
+%             %sigOut(end+1) = 0;
+%         case 3 % vary amp and freq
+%             
+%             if ~isnan(nx)
+%                 dur = freq_map(round(ny),round(nx));
+%                 amp = amp_map(round(ny),round(nx));
+%                 sigOut = amp*cat(2,ones(1,2),zeros(1,21-2));
+%             else
+%                 amp = 0;
+%                 dur = 0;
+%                 sigOut = zeros(1,length(t));
+%             end
+%             %sigOut = repmat(amp,[length(t),1])';
+%             
+%             %sigOut(end+1) = 0;
+%             
+%         case 4 % random
+%             if ~isnan(x)
+%                 amp = 0.1+(5+0.1)*rand(1,1);
+%                 %freq = 1+(40+1)*rand(1,1);
+%                 sigOut = amp*cat(2,ones(1,1),zeros(1,21-1));
+%                 %sigOut(end+1) = 0;
+%             else
+%                 amp = nan;
+%                 freq = nan;
+%                 sigOut = zeros(1,length(t));  
+%             end
+%         otherwise
+%             error('unknown optoControl variable');
+%     end
+%     if DAQ.s3.ScansQueued==0
+%         queueOutputData(DAQ.s3, sigOut');
+%         %samplesQueued = samplesQueued+1;
+%         %disp(samplesQueued);
+%         if ~DAQ.s3.IsRunning
+%             %prepare(DAQ.s3);
+%         end
+%     end
+%     if ~DAQ.s3.IsRunning
+%         startBackground(DAQ.s3);
+%         %disp('outputting new sample');
+%     end
+%     
+% end
 
 % if optoNoise
 %     if ISI > 0 && ~isnan(x)

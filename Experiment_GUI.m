@@ -881,9 +881,9 @@ imshow(handles.V.baseFrame0);
 axis xy;
 
 handles.optoNoiseAmpOut = 5; % 2019-06-20 AndyP and TK fixed at 5V
-handles.gauss_width = 200; % How fast do you want the laser stimulation to fall off
+handles.gauss_width = handles.radiusAroundSpot*5.174; % How fast do you want the laser stimulation to fall off
 [handles.cx,handles.cy]=ginput(1); % Click a point that you want to be the center of a circle
-[handles.binary_map, handles.freq_map, handles.amp_map, handles.dist_map ] = circle_target( handles.V.baseFrame, handles.radiusAroundSpot*handles.pixpercm, handles.cx, handles.cy, handles.gauss_width,handles.optoNoiseAmpOut); % edit this script to change how the characteristics of light stimulation vary with distance from the target
+[handles.binary_map, handles.freq_map, handles.amp_map, handles.dist_map ] = circle_target( handles.V.baseFrame, handles.radiusAroundSpot, handles.cx, handles.cy, handles.gauss_width,handles.optoNoiseAmpOut); % edit this script to change how the characteristics of light stimulation vary with distance from the target
 fprintf('session time: %0.2f s \n',handles.maxSessT);
 
 soundsc(handles.endtone);
